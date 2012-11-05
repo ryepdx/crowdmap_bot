@@ -1,3 +1,4 @@
+import requests, json
 from oyoyo.client import IRCClient
 from oyoyo.cmdhandler import DefaultCommandHandler
 from oyoyo import helpers
@@ -5,7 +6,7 @@ from settings import BOT_NICK, BOT_CHANNEL, BOT_PASS
 
 def on_connect(cli):
     # Identify to nickserv
-    helpers.identify(cli, "#!/s4ndy4ct10ns!")
+    helpers.identify(cli, BOT_PASS)
 
     # Join the channel '#test'
     helpers.join(cli, BOT_CHANNEL)
@@ -19,7 +20,7 @@ class MsgHandler(DefaultCommandHandler):
         and msg_parts[0] == BOT_NICK):
             commands = msg_parts[1].strip().split(' ')
             tags = []
-            twitter_id = commands[1]
+            tweet_id = commands[1]
             commands = commands[1:]
             
             command_index = 0
@@ -35,7 +36,14 @@ class MsgHandler(DefaultCommandHandler):
             address = ' '.join(commands[(command_index-1):])
             
             # Pass on the address, tags, and tweet ID.
-                    
+            tweet = get_tweet(tweet_id)
+            
+
+def get_tweet(id):
+    return json.loads(
+        requests.get('https://api.twitter.com/1/statuses/show.json?id=%s'
+            % id))['text']
+
 cli = IRCClient(MsgHandler, host="niven.freenode.net", port=6667,
     nick=BOT_NICK, connect_cb=on_connect)
 
