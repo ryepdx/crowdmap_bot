@@ -37,12 +37,12 @@ class MsgHandler(DefaultCommandHandler):
             
             # Pass on the address, tags, and tweet ID.
             tweet = get_tweet(tweet_id)
+               
             
-
 def get_tweet(id):
     return json.loads(
         requests.get('https://api.twitter.com/1/statuses/show.json?id=%s'
-            % id))['text']
+            % id))
 
 cli = IRCClient(MsgHandler, host="niven.freenode.net", port=6667,
     nick=BOT_NICK, connect_cb=on_connect)
