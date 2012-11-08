@@ -49,10 +49,10 @@ class MsgHandler(DefaultCommandHandler):
             # If we obtained a geocode for this tweet, put it on the map.
             if geo['status'] == 'OK' and len(geo['results']) > 0:
                 geo = geo['results'][0]
-                neighborhood = [x['long_name']
-                                for x in geo['address_components']
-                                    if 'political' in x['types']][0]
-                add_to_map(tweet['text'], tags, neighborhood, geo['geometry']['location'])
+                neighborhood = [component['long_name']
+                                for component in geo['address_components']
+                                    if 'political' in component['types']][0]
+                add_to_map(get_map_params(tweet, tags, neighborhood, geo['geometry']['location']))
 
 def get_tweet(id):
     return json.loads(
@@ -79,8 +79,8 @@ def get_map_params(tweet, tags, neighborhood, coords):
     params['longitude'] = coords['lng']
     params['location_name'] = neighborhood 
 
-def add_to_map(text, tags, coords):
-    return requests.post(
+def add_to_map(params):
+    return requests.post('http://%s/?task=report' % MAP_API, data=params)
 
 cli = IRCClient(MsgHandler, host="irc.freenode.net", port=6667,
     nick=BOT_NICK, connect_cb=on_connect)
