@@ -1,4 +1,6 @@
+IRC_HOST = "irc.freenode.net"
 BOT_NICK = "crowdmap"
 BOT_PASS = ""
 BOT_CHANNEL = "#sandyaidtest"
-MAP_API = "map.occupy.net/api"
+MAP_API = "sandyaiddev.crowdmap.com/api"
+PARENT_CATEGORY_ID = None
