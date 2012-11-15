@@ -4,3 +4,4 @@ BOT_PASS = ""
 BOT_CHANNEL = "#sandyaidtest"
 MAP_API = "sandyaiddev.crowdmap.com/api"
 PARENT_CATEGORY_ID = None
+ADDRESS_SUFFIX = ', NY'

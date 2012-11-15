@@ -6,12 +6,12 @@ from oyoyo.client import IRCClient
 from oyoyo.cmdhandler import DefaultCommandHandler
 from oyoyo import helpers
 from settings import IRC_HOST, BOT_NICK, BOT_CHANNEL, \
-BOT_PASS, MAP_API, PARENT_CATEGORY_ID
+BOT_PASS, MAP_API, PARENT_CATEGORY_ID, ADDRESS_SUFFIX
 
 class MsgHandler(DefaultCommandHandler):
     
     def __init__(self, *args, **kwargs):
-        self.crowdmap = CrowdMap(MAP_API, PARENT_CATEGORY_ID)
+        self.crowdmap = CrowdMap(MAP_API, PARENT_CATEGORY_ID, ADDRESS_SUFFIX)
         super(MsgHandler, self).__init__(*args, **kwargs)
     
     def privmsg(self, nick, chan, msg):
@@ -50,7 +50,7 @@ class MsgHandler(DefaultCommandHandler):
 
 class GoogleMap:
     @staticmethod
-    def get_geocode(address):
+    def get_location(address):
         return json.loads(
             requests.get('https://maps.googleapis.com/maps/api/geocode/json?sensor=false&address=%s'
                 % address).text)
@@ -70,12 +70,13 @@ class Twitter:
 
 class CrowdMap:
 
-    def __init__(self, map_api, parent_category = None):
+    def __init__(self, map_api, parent_category = None, address_suffix = None):
         self.map_api = map_api
         self.categories = self.get_categories(parent_category)
+        self.address_suffix = address_suffix
     
     def get_map_params(self, tweet, tags, neighborhood, coords):
-        params = {}
+        params = {'task': 'report'}
         date = Twitter.to_datetime(tweet['created_at'])
         
         params['incident_title'] = tweet['text'][0:50] + '...'
@@ -83,7 +84,7 @@ class CrowdMap:
         params['incident_date'] = date.strftime('%m/%d/%Y')
         params['incident_hour'] = date.strftime('%I')
         params['incident_minute'] = date.strftime('%M')
-        params['incident_ampm'] = date.strftime('%p')
+        params['incident_ampm'] = date.strftime('%p').lower()
         params['incident_category'] = ','.join(tags)
         params['latitude'] = coords['lat']
         params['longitude'] = coords['lng']
@@ -92,14 +93,16 @@ class CrowdMap:
         return params
 
     def add_tweet(self, tweet, tags, address=''):
-        coords = None
-
-        if address != '':
-            geo = GoogleMap.get_geocode(address)
-
-        elif 'geo' in tweet and 'coordinates' in tweet['geo']:
-            coords = tweet['geo']['coordinates']
-            geo = GoogleMap.get_geocode('%s,%s' % (coords[0], coords[1]))
+        
+        if address != '' and self.address_suffix != None:
+            address += self.address_suffix
+            
+        elif ('geo' in tweet and tweet['geo']
+        and 'coordinates' in tweet['geo']):
+            address = '%s,%s' % (tweet['geo']['coordinates'][0],
+                                 tweet['geo']['coordinates'][1])
+            
+        geo = GoogleMap.get_location(address)
             
         # If we obtained a geocode for this tweet, put it on the map.
         if geo['status'] == 'OK' and len(geo['results']) > 0:
@@ -108,9 +111,9 @@ class CrowdMap:
                         for component in geo['address_components']
                             if 'political' in component['types']][0]
                             
-            return requests.post('http://%s?task=report' % MAP_API,
+            return json.loads(requests.post('https://%s?task=report' % self.map_api,
                 data=self.get_map_params(tweet, tags,
-                neighborhood, geo['geometry']['location']))
+                neighborhood, geo['geometry']['location'])).text)
         else:
             return None
 
@@ -163,7 +166,84 @@ class TestCrowdMap(unittest.TestCase):
              
     def test_get_categories(self):
         self.assertEqual(self._map.get_categories(), self.categories)
-
+        
+    def test_add_tweet(self):
+        tweet = TestTwitter.get_test_tweet()
+        response = self._map.add_tweet(tweet, ['1', '3'],
+            '520 clinton ave, ny')
+            
+        self.assertTrue('payload' in response
+            and 'success' in response['payload']
+            and response['payload']['success'] == 'true')
+    
+class TestTwitter(unittest.TestCase):
+    @staticmethod
+    def get_test_tweet():
+        return Twitter.get_tweet('267839572883423232')
+    
+    def test_get_tweet(self):
+        tweet = TestTwitter.get_test_tweet()
+        self.assertTrue('created_at' in tweet and 'text' in tweet)
+        self.assertEqual(tweet['created_at'],
+            'Mon Nov 12 04:01:45 +0000 2012')
+        self.assertEqual(tweet['text'],
+           'Correction. We won Startup Weekend! http://t.co/2TYgYD66')
+            
+        def test_to_datetime(self):
+            self.assertEqual(
+                Twitter.to_datetime('Mon Nov 12 04:01:45 +0000 2012'),
+                    datetime(2012, 11, 12, 4, 1, 45)
+                )
+                
+class TestGoogleMap(unittest.TestCase):
+    def test_get_geocode(self):
+        self.assertEqual(GoogleMap.get_location('520 clinton ave, ny'),
+        
+        {u'status': u'OK',
+         u'results':
+             [{u'geometry':
+                 {u'location':
+                     {u'lat': 40.6827426, u'lng': -73.9669612},
+                  u'viewport': 
+                     {u'northeast':
+                         {u'lat': 40.68409158029149, 
+                          u'lng': -73.9656122197085},
+                      u'southwest':
+                         {u'lat': 40.6813936197085,
+                          u'lng': -73.96831018029151}
+                     },
+                  u'location_type': u'ROOFTOP'},
+               u'address_components':
+                   [{u'long_name': u'520',
+                     u'types': [u'street_number'], 
+                     u'short_name': u'520'},
+                    {u'long_name': u'Clinton Ave',
+                     u'types': [u'route'],
+                     u'short_name': u'Clinton Ave'},
+                    {u'long_name': u'Clinton Hill',
+                     u'types': [u'neighborhood', u'political'],
+                     u'short_name': u'Clinton Hill'},
+                    {u'long_name': u'Brooklyn',
+                     u'types': [u'sublocality', u'political'],
+                     u'short_name': u'Brooklyn'},
+                    {u'long_name': u'New York',
+                     u'types': [u'locality', u'political'],
+                     u'short_name': u'New York'},
+                    {u'long_name': u'Kings',
+                     u'types': [u'administrative_area_level_2', u'political'],
+                     u'short_name': u'Kings'},
+                    {u'long_name': u'New York',
+                     u'types': [u'administrative_area_level_1', u'political'],
+                     u'short_name': u'NY'},
+                    {u'long_name': u'United States',
+                     u'types': [u'country', u'political'],
+                     u'short_name': u'US'},
+                    {u'long_name': u'11238',
+                     u'types': [u'postal_code'],
+                     u'short_name': u'11238'}],
+               u'formatted_address': u'520 Clinton Ave, Brooklyn, NY 11238, USA',
+               u'types': [u'street_address']}]})
+                
 def main():
     bot = CrowdMapBot(IRC_HOST, BOT_NICK, BOT_PASS, BOT_CHANNEL)
     bot.connect()
